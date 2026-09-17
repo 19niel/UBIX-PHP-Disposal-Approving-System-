@@ -141,7 +141,7 @@ $final_emails = $pdo->query("SELECT f.*, u.name as user_name FROM workflow_final
 
                 <div style="margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 2rem;">
                     <h3 style="margin-top: 0;">Final Email Recipients</h3>
-                    <p class="text-muted" style="margin-bottom: 1.5rem;">These users will receive an email with the final approved PDF attached once the entire workflow is completed.</p>
+                    <p class="text-muted" style="margin-bottom: 1.5rem;">These users will receive an email with the completed request link once the entire workflow is completed.</p>
                     
                     <div id="final-email-container">
                         <?php foreach ($final_emails as $f_email): ?>

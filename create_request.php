@@ -13,8 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     // File upload
     $attachment_paths = [];
-    if (isset($_FILES['attachments'])) {
-        $uploadDir = 'uploads/';
+    if (isset($_FILES['attachments']) && !empty($_FILES['attachments']['name'][0])) {
+        // Sanitize memo number to be safe for directory names
+        $safe_memo = preg_replace('/[^A-Za-z0-9_\-]/', '_', trim($memo));
+        $uploadDir = 'uploads/' . $safe_memo . '/';
+        
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
         
         foreach ($_FILES['attachments']['tmp_name'] as $key => $tmp_name) {
