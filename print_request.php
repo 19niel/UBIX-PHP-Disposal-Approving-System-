@@ -100,7 +100,6 @@ foreach ($approvals as $approval) {
         .signature-img-container { 
             height: 50px; 
             width: 100%;
-            border-bottom: 1px solid #000; 
             margin-bottom: 5px; 
             position: relative; 
         }
