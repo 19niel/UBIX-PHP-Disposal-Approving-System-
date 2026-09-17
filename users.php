@@ -110,6 +110,9 @@ $users = $pdo->query("SELECT * FROM users ORDER BY name ASC")->fetchAll();
         <?php endif; ?>
 
         <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <input type="text" id="searchInput" class="form-control" style="width: 300px;" placeholder="Search by Name, Username, or Email..." onkeyup="filterTable()">
+            </div>
             <table class="table">
                 <thead>
                     <tr>
@@ -124,7 +127,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY name ASC")->fetchAll();
                 </thead>
                 <tbody>
                     <?php foreach ($users as $u): ?>
-                    <tr>
+                    <tr class="searchable-row" data-search="<?php echo htmlspecialchars(strtolower($u['name'] . ' ' . $u['username'] . ' ' . $u['email'])); ?>">
                         <td>#<?php echo $u['id']; ?></td>
                         <td><strong><?php echo htmlspecialchars($u['name']); ?></strong></td>
                         <td><?php echo htmlspecialchars($u['position'] ?? 'N/A'); ?></td>
@@ -238,6 +241,20 @@ $users = $pdo->query("SELECT * FROM users ORDER BY name ASC")->fetchAll();
             if (event.target == modal) {
                 closeModal();
             }
+        }
+
+        function filterTable() {
+            let input = document.getElementById('searchInput').value.toLowerCase();
+            let rows = document.querySelectorAll('.searchable-row');
+            
+            rows.forEach(row => {
+                let searchData = row.getAttribute('data-search');
+                if (searchData.includes(input)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
         }
     </script>
 </body>

@@ -70,6 +70,10 @@ function getCurrentApprover($pdo, $sort_number) {
             </div>
         </div>
 
+        <div style="margin-bottom: 1rem;">
+            <input type="text" id="searchInput" class="form-control" style="width: 100%; max-width: 400px;" placeholder="Search by Title or Memo Number..." onkeyup="filterTable()">
+        </div>
+
         <?php if ($status_filter === 'pending'): ?>
             <div class="card">
                 <table class="table">
@@ -86,7 +90,7 @@ function getCurrentApprover($pdo, $sort_number) {
                             <tr><td colspan="4" style="text-align:center; color: var(--text-muted);">No requests currently need your approval.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($requests_to_approve as $req): ?>
-                        <tr>
+                        <tr class="searchable-row" data-search="<?php echo htmlspecialchars(strtolower($req['title'] . ' ' . $req['memo_number'])); ?>">
                             <td><strong><?php echo htmlspecialchars($req['title']); ?></strong><br><small><?php echo htmlspecialchars($req['memo_number']); ?></small></td>
                             <td><span class="badge" style="background: var(--primary); color: white;">Action Required</span></td>
                             <td><?php echo date('M d, Y', strtotime($req['created_at'])); ?></td>
@@ -113,7 +117,7 @@ function getCurrentApprover($pdo, $sort_number) {
                             <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No requests found.</td></tr>
                         <?php endif; ?>
                         <?php foreach ($requests as $req): ?>
-                        <tr>
+                        <tr class="searchable-row" data-search="<?php echo htmlspecialchars(strtolower($req['title'] . ' ' . $req['memo_number'])); ?>">
                             <td><strong><?php echo htmlspecialchars($req['title']); ?></strong><br><small><?php echo htmlspecialchars($req['memo_number']); ?></small></td>
                             <td>
                                 <span class="badge badge-<?php echo strtolower($req['status']); ?>"><?php echo $req['status']; ?></span>
@@ -134,5 +138,21 @@ function getCurrentApprover($pdo, $sort_number) {
             </div>
         <?php endif; ?>
     </div>
+
+    <script>
+        function filterTable() {
+            let input = document.getElementById('searchInput').value.toLowerCase();
+            let rows = document.querySelectorAll('.searchable-row');
+            
+            rows.forEach(row => {
+                let searchData = row.getAttribute('data-search');
+                if (searchData.includes(input)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+    </script>
 </body>
 </html>

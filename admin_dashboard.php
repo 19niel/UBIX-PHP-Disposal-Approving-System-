@@ -77,7 +77,10 @@ $all_requests = $pdo->query("SELECT r.*, u.name as creator_name FROM requests r 
         </div>
 
         <div class="card">
-            <h3 style="margin-top: 0;">All System Requests</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">All System Requests</h3>
+                <input type="text" id="searchInput" class="form-control" style="width: 300px;" placeholder="Search by Title or Memo Number..." onkeyup="filterTable()">
+            </div>
             <table class="table">
                 <thead>
                     <tr>
@@ -91,7 +94,7 @@ $all_requests = $pdo->query("SELECT r.*, u.name as creator_name FROM requests r 
                 </thead>
                 <tbody>
                     <?php foreach ($all_requests as $req): ?>
-                    <tr>
+                    <tr class="searchable-row" data-search="<?php echo htmlspecialchars(strtolower($req['title'] . ' ' . $req['memo_number'])); ?>">
                         <td>#<?php echo $req['id']; ?></td>
                         <td><?php echo htmlspecialchars($req['title']); ?></td>
                         <td><?php echo htmlspecialchars($req['creator_name']); ?></td>
@@ -118,5 +121,21 @@ $all_requests = $pdo->query("SELECT r.*, u.name as creator_name FROM requests r 
             </table>
         </div>
     </div>
+
+    <script>
+        function filterTable() {
+            let input = document.getElementById('searchInput').value.toLowerCase();
+            let rows = document.querySelectorAll('.searchable-row');
+            
+            rows.forEach(row => {
+                let searchData = row.getAttribute('data-search');
+                if (searchData.includes(input)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+    </script>
 </body>
 </html>
