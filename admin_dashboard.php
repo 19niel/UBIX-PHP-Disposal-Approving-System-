@@ -23,8 +23,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_request_id']))
     $stmt->execute([$del_id]);
     $req = $stmt->fetch();
     
-    if ($req && !empty($req['attachment_path']) && file_exists($req['attachment_path'])) {
-        unlink($req['attachment_path']);
+    if ($req && !empty($req['attachment_path'])) {
+        $paths = json_decode($req['attachment_path'], true);
+        if (!is_array($paths)) {
+            $paths = [$req['attachment_path']];
+        }
+        foreach ($paths as $p) {
+            if (file_exists($p)) {
+                unlink($p);
+            }
+        }
     }
     
     // Delete from DB (cascade handles approvals and magic links)

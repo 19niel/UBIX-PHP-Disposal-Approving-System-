@@ -269,35 +269,44 @@ if ($request) {
             </div>
 
             <?php if ($request['attachment_path']): 
-                $ext = strtolower(pathinfo($request['attachment_path'], PATHINFO_EXTENSION));
-                $is_image = in_array($ext, ['jpg', 'jpeg', 'png', 'gif']);
-                $is_pdf = ($ext === 'pdf');
+                $attachments = json_decode($request['attachment_path'], true);
+                if (!is_array($attachments)) {
+                    $attachments = [$request['attachment_path']];
+                }
             ?>
                 <div style="margin-top: 1.5rem;">
-                    <span class="text-muted" style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem;">Attachment</span>
+                    <span class="text-muted" style="display: block; font-size: 0.875rem; margin-bottom: 0.5rem;">Attachments</span>
                     
-                    <div style="display: flex; gap: 1.5rem; align-items: flex-start; background: #f9fafb; padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
-                        
-                        <!-- Preview Box -->
-                        <div style="flex: 1; max-width: 400px; max-height: 400px; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 4px; background: white; display: flex; align-items: center; justify-content: center;">
-                            <?php if ($is_image): ?>
-                                <img src="<?php echo htmlspecialchars($request['attachment_path']); ?>" alt="Attachment Preview" style="max-width: 100%; max-height: 400px; object-fit: contain;">
-                            <?php elseif ($is_pdf): ?>
-                                <iframe src="<?php echo htmlspecialchars($request['attachment_path']); ?>" style="width: 100%; height: 400px; border: none;"></iframe>
-                            <?php else: ?>
-                                <div style="padding: 2rem; color: var(--text-muted); text-align: center;">
-                                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">📄</div>
-                                    <div>Preview not available for this file type.</div>
-                                </div>
-                            <?php endif; ?>
-                        </div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <?php foreach ($attachments as $att_path): 
+                            $ext = strtolower(pathinfo($att_path, PATHINFO_EXTENSION));
+                            $is_image = in_array($ext, ['jpg', 'jpeg', 'png', 'gif']);
+                            $is_pdf = ($ext === 'pdf');
+                        ?>
+                        <div style="display: flex; gap: 1.5rem; align-items: flex-start; background: #f9fafb; padding: 1rem; border-radius: 6px; border: 1px solid var(--border);">
+                            
+                            <!-- Preview Box -->
+                            <div style="flex: 1; max-width: 400px; max-height: 400px; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 4px; background: white; display: flex; align-items: center; justify-content: center;">
+                                <?php if ($is_image): ?>
+                                    <img src="<?php echo htmlspecialchars($att_path); ?>" alt="Attachment Preview" style="max-width: 100%; max-height: 400px; object-fit: contain;">
+                                <?php elseif ($is_pdf): ?>
+                                    <iframe src="<?php echo htmlspecialchars($att_path); ?>" style="width: 100%; height: 400px; border: none;"></iframe>
+                                <?php else: ?>
+                                    <div style="padding: 2rem; color: var(--text-muted); text-align: center;">
+                                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">📄</div>
+                                        <div>Preview not available for this file type.</div>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
 
-                        <!-- Action Button -->
-                        <div>
-                            <a href="<?php echo htmlspecialchars($request['attachment_path']); ?>" target="_blank" class="btn" style="background: var(--primary); display: inline-flex; align-items: center; gap: 0.5rem;">
-                                <span>View Full File</span>
-                            </a>
+                            <!-- Action Button -->
+                            <div>
+                                <a href="<?php echo htmlspecialchars($att_path); ?>" target="_blank" class="btn" style="background: var(--primary); display: inline-flex; align-items: center; gap: 0.5rem;">
+                                    <span>View Full File</span>
+                                </a>
+                            </div>
                         </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
             <?php endif; ?>

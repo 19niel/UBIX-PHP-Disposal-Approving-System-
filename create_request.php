@@ -12,17 +12,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $request_message = $_POST['message'];
     
     // File upload
-    $attachment_path = '';
-    if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+    $attachment_paths = [];
+    if (isset($_FILES['attachments'])) {
         $uploadDir = 'uploads/';
         if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
         
-        $filename = time() . '_' . basename($_FILES['attachment']['name']);
-        $targetFile = $uploadDir . $filename;
-        if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetFile)) {
-            $attachment_path = $targetFile;
+        foreach ($_FILES['attachments']['tmp_name'] as $key => $tmp_name) {
+            if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
+                $filename = time() . '_' . basename($_FILES['attachments']['name'][$key]);
+                $targetFile = $uploadDir . $filename;
+                if (move_uploaded_file($tmp_name, $targetFile)) {
+                    $attachment_paths[] = $targetFile;
+                }
+            }
         }
     }
+    $attachment_path = !empty($attachment_paths) ? json_encode($attachment_paths) : '';
 
     try {
         // Insert request
@@ -130,8 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Attachment (PDF, Word, Images)</label>
-                    <input type="file" name="attachment" class="form-control" accept=".pdf,.doc,.docx,.jpg,.png">
+                    <label class="form-label">Attachments (PDF, Word, Excel, Images) - You can select multiple</label>
+                    <input type="file" name="attachments[]" class="form-control" accept=".pdf,.doc,.docx,.jpg,.png,.xls,.xlsx" multiple>
                 </div>
 
                 <button type="submit" class="btn" style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;">Submit Request</button>

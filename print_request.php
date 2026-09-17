@@ -99,8 +99,7 @@ foreach ($approvals as $approval) {
         }
         .signature-img-container { 
             height: 50px; 
-            width: 200px;
-            max-width: 100%;
+            width: 100%;
             border-bottom: 1px solid #000; 
             margin-bottom: 5px; 
             position: relative; 
