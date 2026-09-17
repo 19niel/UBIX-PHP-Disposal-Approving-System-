@@ -104,17 +104,11 @@ $count_rejected = $stmt->fetchColumn();
             </a>
 
             <a href="list.php?status=approved" class="stat-card" style="border-top: 6px solid var(--success); position: relative;">
-                <?php if($count_approved > 0): ?>
-                    <div class="notification-badge" style="background: var(--success);"><?php echo $count_approved; ?></div>
-                <?php endif; ?>
                 <div class="stat-icon">✅</div>
                 <div class="stat-label">Approved Requests</div>
             </a>
 
             <a href="list.php?status=rejected" class="stat-card" style="border-top: 6px solid var(--danger); position: relative;">
-                <?php if($count_rejected > 0): ?>
-                    <div class="notification-badge" style="background: var(--danger);"><?php echo $count_rejected; ?></div>
-                <?php endif; ?>
                 <div class="stat-icon">❌</div>
                 <div class="stat-label">Rejected Requests</div>
             </a>
