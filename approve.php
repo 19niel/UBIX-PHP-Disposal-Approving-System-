@@ -180,6 +180,7 @@ if ($request) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
     <title>Review Request - Disposal App</title>
     <link rel="stylesheet" href="style.css">

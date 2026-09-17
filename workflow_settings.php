@@ -62,6 +62,7 @@ $final_emails = $pdo->query("SELECT f.*, u.name as user_name FROM workflow_final
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
     <title>Workflow Settings - Disposal App</title>
     <link rel="stylesheet" href="style.css">

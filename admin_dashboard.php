@@ -39,6 +39,7 @@ $all_requests = $pdo->query("SELECT r.*, u.name as creator_name FROM requests r 
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
     <title>Admin Dashboard - Disposal App</title>
     <link rel="stylesheet" href="style.css">

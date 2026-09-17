@@ -57,6 +57,7 @@ foreach ($approvals as $approval) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
     <title>Print Request - <?php echo htmlspecialchars($request['memo_number']); ?></title>
     <style>

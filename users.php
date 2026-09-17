@@ -73,6 +73,7 @@ $users = $pdo->query("SELECT * FROM users ORDER BY name ASC")->fetchAll();
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
     <title>Manage Users - Disposal App</title>
     <link rel="stylesheet" href="style.css">
