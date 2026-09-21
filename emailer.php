@@ -138,4 +138,81 @@ function sendFinalApprovalEmail($pdo, $request_id) {
         return false;
     }
 }
+
+function sendRejectionEmail($pdo, $request_id, $rejecterName, $remarks) {
+    // 1. Fetch final recipients
+    $stmt = $pdo->query("SELECT u.email, u.name FROM workflow_final_emails f JOIN users u ON f.user_id = u.id");
+    $recipients = $stmt->fetchAll();
+    
+    if (count($recipients) === 0) return true; // No recipients
+    
+    // 2. Fetch request details
+    $stmt = $pdo->prepare("SELECT title, memo_number FROM requests WHERE id = ?");
+    $stmt->execute([$request_id]);
+    $request = $stmt->fetch();
+    
+    if (!$request) return false;
+    
+    // 3. Send Email
+    $mail = new PHPMailer(true);
+    
+    try {
+        // Server settings
+        $mail->isSMTP();
+        $mail->Host       = $_ENV['SMTP_HOST'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['SMTP_USERNAME'];
+        $mail->Password   = $_ENV['SMTP_PASSWORD'];
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = $_ENV['SMTP_PORT'];
+
+        $mail->setFrom($_ENV['SMTP_FROM_EMAIL'], $_ENV['SMTP_FROM_NAME']);
+        
+        foreach ($recipients as $recipient) {
+            $mail->addAddress($recipient['email'], $recipient['name']);
+        }
+
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = 'Rejected: ' . $request['title'];
+        $appUrl = rtrim($_ENV['APP_URL'], '/');
+        
+        // Embed Logo Image
+        $logoPath = __DIR__ . '/Images/Ubix_Logo.png';
+        if (file_exists($logoPath)) {
+            $mail->addEmbeddedImage($logoPath, 'ubix_logo');
+            $logoHtml = "<img src='cid:ubix_logo' alt='Ubix Logo' style='max-height: 60px;'>";
+        } else {
+            $logoHtml = "<img src='{$appUrl}/Images/Ubix_Logo.png' alt='Ubix Logo' style='max-height: 60px;'>";
+        }
+        
+        $remarksHtml = htmlspecialchars($remarks);
+        
+        $mail->Body = "
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;'>
+                <div style='text-align: center; margin-bottom: 20px;'>
+                    $logoHtml
+                </div>
+                <h3 style='color: #DC2626;'>Disposal Request Rejected</h3>
+                <p>Hello,</p>
+                <p>The request form of <strong>{$request['title']}</strong> has been rejected by <strong>{$rejecterName}</strong>.</p>
+                <div style='background-color: #fef2f2; border-left: 4px solid #DC2626; padding: 15px; margin: 15px 0;'>
+                    <p style='margin: 0; color: #991b1b;'><strong>Reason for Rejection:</strong><br/>{$remarksHtml}</p>
+                </div>
+                <p>Click this button to view the request form:</p>
+                <p style='text-align: center; margin: 30px 0;'>
+                    <a href='{$appUrl}/approve.php?id={$request_id}' style='padding: 12px 24px; background-color: #DC2626; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;'>View Request</a>
+                </p>
+                <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;'>
+                <p style='color: #6b7280; font-size: 12px; margin: 0;'>Thank you,<br>Disposal App System</p>
+            </div>
+        ";
+
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Rejection email could not be sent. Mailer Error: {$mail->ErrorInfo}");
+        return false;
+    }
+}
 ?>

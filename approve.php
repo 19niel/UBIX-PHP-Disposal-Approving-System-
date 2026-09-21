@@ -69,27 +69,29 @@ if (isset($_GET['token'])) {
     $error = "No request specified.";
 }
 
-// Handle Form Submission (Signature or Admin Countersign)
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['signature_base64'])) {
-    $signature = $_POST['signature_base64'];
-    $is_admin_bypass = isset($_POST['is_admin_bypass']) && isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin';
+// Handle Form Submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    $signature = isset($_POST['signature_base64']) ? $_POST['signature_base64'] : '';
+    $remarks = isset($_POST['remarks']) ? $_POST['remarks'] : null;
+    $is_admin_bypass = ($action === 'admin_skip' && isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin');
     
     if ($approver || $is_admin_bypass) {
         
         try {
             $pdo->beginTransaction();
             
-            // If it's an admin bypass, we need to find the current pending step's approver to sign on their behalf
             if ($is_admin_bypass) {
                 $stmt = $pdo->prepare("SELECT * FROM workflow_routing WHERE sort_number = ?");
                 $stmt->execute([$request['current_sort_number']]);
                 $target_approver = $stmt->fetch();
                 if (!$target_approver) {
-                    throw new Exception("Could not find the current pending approver to countersign.");
+                    throw new Exception("Could not find the current pending approver to skip.");
                 }
                 $target_user_id = $target_approver['user_id'];
                 $target_tier_label = $target_approver['tier_label'];
                 $admin_bypass_id = $_SESSION['user_id'];
+                $signature = ''; // Blank signature
             } else {
                 $target_user_id = $user_id;
                 $target_tier_label = $approver['tier_label'];
@@ -100,64 +102,69 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['signature_base64'])) {
             $stmt = $pdo->prepare("UPDATE magic_links SET is_used = 1 WHERE request_id = ? AND user_id = ?");
             $stmt->execute([$request['id'], $target_user_id]);
             
-            // 2. Save Signature to History
-            $stmt = $pdo->prepare("INSERT INTO request_approvals (request_id, sort_number, user_id, tier_label, signature_base64, admin_bypass_id) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$request['id'], $request['current_sort_number'], $target_user_id, $target_tier_label, $signature, $admin_bypass_id]);
-            
-            // 3. Move to next step
-            $next_sort = $request['current_sort_number'] + 1;
-            
-            // Check if next step exists
-            $stmt = $pdo->prepare("SELECT w.*, u.email, u.name FROM workflow_routing w JOIN users u ON w.user_id = u.id WHERE w.sort_number = ?");
-            $stmt->execute([$next_sort]);
-            $next_approver = $stmt->fetch();
-            
-            if ($next_approver) {
-                // Update request
-                $stmt = $pdo->prepare("UPDATE requests SET current_sort_number = ? WHERE id = ?");
-                $stmt->execute([$next_sort, $request['id']]);
+            if ($action === 'reject') {
+                $stmt = $pdo->prepare("INSERT INTO request_approvals (request_id, sort_number, user_id, tier_label, signature_base64, admin_bypass_id, status, remarks) VALUES (?, ?, ?, ?, ?, ?, 'Rejected', ?)");
+                $stmt->execute([$request['id'], $request['current_sort_number'], $target_user_id, $target_tier_label, $signature, $admin_bypass_id, $remarks]);
                 
-                // Generate link and email next
-                $new_token = bin2hex(random_bytes(32));
-                $stmt = $pdo->prepare("INSERT INTO magic_links (token, request_id, user_id) VALUES (?, ?, ?)");
-                $stmt->execute([$new_token, $request['id'], $next_approver['user_id']]);
-                
-                sendMagicLinkEmail($next_approver['email'], $next_approver['name'], $new_token, $request['title'], $next_approver['tier_label']);
-                
-                if ($is_admin_bypass) {
-                    $msg = "You have successfully countersigned the request. The next approver ({$next_approver['name']}) has been notified.";
-                } else {
-                    $msg = "You have successfully approved the request. The next approver ({$next_approver['name']}) has been notified.";
-                }
-                $pdo->commit();
-                echo "<script>alert(".json_encode($msg)."); window.location.href='dashboard.php';</script>";
-                exit;
-            } else {
-                // No next step = Fully Approved
-                $stmt = $pdo->prepare("UPDATE requests SET status = 'Approved' WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE requests SET status = 'Rejected' WHERE id = ?");
                 $stmt->execute([$request['id']]);
                 
-                sendFinalApprovalEmail($pdo, $request['id']);
+                $rejecter_name = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : 'An Approver';
+                sendRejectionEmail($pdo, $request['id'], $rejecter_name, $remarks);
                 
-                if ($is_admin_bypass) {
-                    $msg = "You have successfully countersigned the request. This was the final step, and the request is now Fully Approved!";
-                } else {
-                    $msg = "You have successfully approved the request. This was the final step, and the request is now Fully Approved!";
-                }
                 $pdo->commit();
-                echo "<script>alert(".json_encode($msg)."); window.location.href='dashboard.php';</script>";
+                echo "<script src='https://cdn.jsdelivr.net/npm/sweetalert2@11'></script><style>body { font-family: sans-serif; }</style><script>document.addEventListener('DOMContentLoaded', function() { Swal.fire({ title: 'Success!', text: 'You have successfully rejected the request.', icon: 'success', confirmButtonColor: '#10b981' }).then(function() { window.location.href='dashboard.php'; }); });</script>";
                 exit;
+            } else {
+                // 2. Save Signature to History
+                $stmt = $pdo->prepare("INSERT INTO request_approvals (request_id, sort_number, user_id, tier_label, signature_base64, admin_bypass_id) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$request['id'], $request['current_sort_number'], $target_user_id, $target_tier_label, $signature, $admin_bypass_id]);
+                
+                // 3. Move to next step
+                $next_sort = $request['current_sort_number'] + 1;
+                
+                $stmt = $pdo->prepare("SELECT w.*, u.email, u.name FROM workflow_routing w JOIN users u ON w.user_id = u.id WHERE w.sort_number = ?");
+                $stmt->execute([$next_sort]);
+                $next_approver = $stmt->fetch();
+                
+                if ($next_approver) {
+                    $stmt = $pdo->prepare("UPDATE requests SET current_sort_number = ? WHERE id = ?");
+                    $stmt->execute([$next_sort, $request['id']]);
+                    
+                    $new_token = bin2hex(random_bytes(32));
+                    $stmt = $pdo->prepare("INSERT INTO magic_links (token, request_id, user_id) VALUES (?, ?, ?)");
+                    $stmt->execute([$new_token, $request['id'], $next_approver['user_id']]);
+                    
+                    sendMagicLinkEmail($next_approver['email'], $next_approver['name'], $new_token, $request['title'], $next_approver['tier_label']);
+                    
+                    if ($is_admin_bypass) {
+                        $msg = "You have successfully skipped the step. The next approver ({$next_approver['name']}) has been notified.";
+                    } else {
+                        $msg = "You have successfully approved the request. The next approver ({$next_approver['name']}) has been notified.";
+                    }
+                    $pdo->commit();
+                    echo "<script src='https://cdn.jsdelivr.net/npm/sweetalert2@11'></script><style>body { font-family: sans-serif; }</style><script>document.addEventListener('DOMContentLoaded', function() { Swal.fire({ title: 'Success!', text: ".json_encode($msg).", icon: 'success', confirmButtonColor: '#10b981' }).then(function() { window.location.href='dashboard.php'; }); });</script>";
+                    exit;
+                } else {
+                    $stmt = $pdo->prepare("UPDATE requests SET status = 'Approved' WHERE id = ?");
+                    $stmt->execute([$request['id']]);
+                    
+                    sendFinalApprovalEmail($pdo, $request['id']);
+                    
+                    if ($is_admin_bypass) {
+                        $msg = "You have successfully skipped the step. This was the final step, and the request is now Fully Approved!";
+                    } else {
+                        $msg = "You have successfully approved the request. This was the final step, and the request is now Fully Approved!";
+                    }
+                    $pdo->commit();
+                    echo "<script src='https://cdn.jsdelivr.net/npm/sweetalert2@11'></script><style>body { font-family: sans-serif; }</style><script>document.addEventListener('DOMContentLoaded', function() { Swal.fire({ title: 'Success!', text: ".json_encode($msg).", icon: 'success', confirmButtonColor: '#10b981' }).then(function() { window.location.href='dashboard.php'; }); });</script>";
+                    exit;
+                }
             }
-            $approver = null; // Hide signature pad
-            
-            // Refresh request
-            $stmt = $pdo->prepare("SELECT r.*, u.name as creator_name FROM requests r JOIN users u ON r.creator_user_id = u.id WHERE r.id = ?");
-            $stmt->execute([$request['id']]);
-            $request = $stmt->fetch();
             
         } catch(Exception $e) {
             $pdo->rollBack();
-            $error = "Failed to process approval: " . $e->getMessage();
+            $error = "Failed to process: " . $e->getMessage();
         }
     }
 }
@@ -165,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['signature_base64'])) {
 // Fetch Full Workflow WITH signatures
 if ($request) {
     $stmt = $pdo->prepare("
-        SELECT w.*, u.name as approver_name, a.signature_base64, a.action_date, a.admin_bypass_id, admin_u.name as admin_name
+        SELECT w.*, u.name as approver_name, a.signature_base64, a.action_date, a.admin_bypass_id, admin_u.name as admin_name, a.status, a.remarks
         FROM workflow_routing w 
         JOIN users u ON w.user_id = u.id 
         LEFT JOIN request_approvals a ON w.user_id = a.user_id AND w.sort_number = a.sort_number AND a.request_id = ?
@@ -186,6 +193,7 @@ if ($request) {
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .signature-wrapper {
             border: 2px dashed var(--border);
@@ -215,6 +223,24 @@ if ($request) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
             <h2>Disposal Request Details</h2>
             <div style="display: flex; gap: 1rem;" class="no-print">
+                <?php 
+                $can_edit = false;
+                if ($request && $request['status'] === 'Rejected' && isset($_SESSION['user_id'])) {
+                    if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin') {
+                        $can_edit = true;
+                    } else if ($_SESSION['user_id'] == $request['creator_user_id']) {
+                        $can_edit = true;
+                    } else {
+                        $stmt_edit = $pdo->prepare("SELECT 1 FROM workflow_final_emails WHERE user_id = ?");
+                        $stmt_edit->execute([$_SESSION['user_id']]);
+                        if ($stmt_edit->fetchColumn()) $can_edit = true;
+                    }
+                }
+                ?>
+                <?php if ($can_edit): ?>
+                    <a href="edit_request.php?id=<?php echo $request['id']; ?>" class="btn" style="background: var(--primary);">Edit Request</a>
+                <?php endif; ?>
+
                 <?php if ($request && $request['status'] === 'Approved'): ?>
                     <a href="print_request.php?id=<?php echo $request['id']; ?>" target="_blank" class="btn" style="background: var(--success);">Print Document</a>
                 <?php endif; ?>
@@ -255,7 +281,7 @@ if ($request) {
                 </div>
                 <div>
                     <span class="text-muted" style="display: block; font-size: 0.875rem;">Status</span>
-                    <strong style="color: <?php echo $request['status']=='Approved' ? 'var(--success)' : 'var(--primary)'; ?>"><?php echo $request['status']; ?></strong>
+                    <strong style="color: <?php echo $request['status']=='Approved' ? 'var(--success)' : ($request['status']=='Rejected' ? 'var(--danger)' : 'var(--primary)'); ?>"><?php echo $request['status']; ?></strong>
                 </div>
                 <div>
                     <span class="text-muted" style="display: block; font-size: 0.875rem;">Created By</span>
@@ -315,7 +341,10 @@ if ($request) {
                 <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0;">
                 
                 <div id="approve-action-block" style="text-align: center;">
-                    <button type="button" class="btn" style="background: var(--success); font-size: 1.5rem; padding: 1rem 3rem; width: 100%; max-width: 400px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);" onclick="showSignaturePad()">Approve Request</button>
+                    <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+                        <button type="button" class="btn" style="background: var(--success); font-size: 1.5rem; padding: 1rem 3rem; max-width: 400px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);" onclick="showSignaturePad()">Approve Request</button>
+                        <button type="button" class="btn" style="background: var(--danger); font-size: 1.5rem; padding: 1rem 3rem; max-width: 400px; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.2);" onclick="rejectRequest()">Reject Request</button>
+                    </div>
                     <p class="text-muted" style="margin-top: 1rem; font-size: 0.875rem;">Clicking Approve will prompt you for your digital signature.</p>
                 </div>
             <?php endif; ?>
@@ -324,10 +353,15 @@ if ($request) {
                 <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0;">
                 <div id="admin-override-block" style="text-align: center; background: #fff5f5; padding: 1.5rem; border: 1px solid #fed7d7; border-radius: 8px;">
                     <h3 style="color: var(--danger); margin-top: 0;">Admin Override</h3>
-                    <p class="text-muted" style="margin-bottom: 1.5rem;">The designated person is currently pending approval. As an admin, you can counter sign on their behalf.</p>
-                    <button type="button" class="btn" style="background: var(--danger); font-size: 1.2rem; padding: 0.75rem 2rem;" onclick="unlockAdminSignature()">Admin Countersign</button>
+                    <p class="text-muted" style="margin-bottom: 1.5rem;">The designated person is currently pending approval. As an admin, you can skip this step.</p>
+                    <button type="button" class="btn" style="background: var(--danger); font-size: 1.2rem; padding: 0.75rem 2rem;" onclick="adminSkip()">Admin Skip</button>
                 </div>
             <?php endif; ?>
+
+            <form id="actionForm" method="POST" style="display: none;">
+                <input type="hidden" name="action" id="actionInput">
+                <input type="hidden" name="remarks" id="remarksInput">
+            </form>
 
             <!-- Universal Signature Pad Container -->
             <div id="signature-container" style="display: none; border: 2px solid var(--success); padding: 2rem; border-radius: 8px; background: #f0fdf4; margin-top: 1rem;">
@@ -337,7 +371,7 @@ if ($request) {
                 </p>
                 
                 <form method="POST" id="signatureForm">
-                    <input type="hidden" name="is_admin_bypass" id="isAdminBypass" value="0">
+                    <input type="hidden" name="action" value="approve">
                     <div class="signature-wrapper">
                         <canvas id="signaturePad"></canvas>
                     </div>
@@ -364,27 +398,33 @@ if ($request) {
                         </div>
                         
                         <div style="display: flex; align-items: center; gap: 1.5rem; text-align: right;">
-                            <?php if ($step['signature_base64']): ?>
+                            <?php if ($step['status'] === 'Rejected'): ?>
+                                <div style="text-align: right; font-size: 0.75rem; color: var(--text-muted);">
+                                    Rejected On:<br>
+                                    <strong><?php echo date('M d, Y h:i A', strtotime($step['action_date'])); ?></strong>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                                    <span style="color: var(--danger); font-weight: bold;">Rejected</span>
+                                    <small style="color: var(--text-muted); max-width: 200px; text-align: right;"><?php echo htmlspecialchars($step['remarks']); ?></small>
+                                </div>
+                            <?php elseif ($step['signature_base64']): ?>
                                 <div style="text-align: right; font-size: 0.75rem; color: var(--text-muted);">
                                     Approved On:<br>
                                     <strong><?php echo date('M d, Y h:i A', strtotime($step['action_date'])); ?></strong>
                                 </div>
-                                <?php if ($step['admin_bypass_id']): ?>
-                                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                                        <img src="<?php echo $step['signature_base64']; ?>" alt="Signature" style="height: 50px; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 2px;">
-                                        <div style="font-size: 0.75rem; color: var(--danger); font-weight: bold; background: #fef2f2; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 4px;">
-                                            Countersigned by Admin: <?php echo htmlspecialchars($step['admin_name']); ?>
-                                        </div>
-                                    </div>
-                                <?php else: ?>
-                                    <img src="<?php echo $step['signature_base64']; ?>" alt="Signature" style="height: 50px; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 2px;">
-                                <?php endif; ?>
+                                <img src="<?php echo $step['signature_base64']; ?>" alt="Signature" style="height: 50px; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 2px;">
+                            <?php elseif ($step['admin_bypass_id']): ?>
+                                <div style="text-align: right; font-size: 0.75rem; color: var(--text-muted);">
+                                    Approved On:<br>
+                                    <strong><?php echo date('M d, Y h:i A', strtotime($step['action_date'])); ?></strong>
+                                </div>
+                                <div style="width: 54px; height: 50px;"></div>
                             <?php endif; ?>
 
                             <?php if ($step['sort_number'] == $request['current_sort_number'] && $request['status'] == 'Pending'): ?>
                                 <span class="badge" style="background: var(--primary); color: white; padding: 0.5rem 1rem;">Next Approver</span>
-                            <?php elseif ($step['sort_number'] < $request['current_sort_number'] || $request['status'] == 'Approved'): ?>
-                                <span class="badge" style="background: var(--success); color: white; padding: 0.5rem 1rem;">Approved</span>
+                            <?php elseif ($step['sort_number'] < $request['current_sort_number'] || $request['status'] == 'Approved' || $step['status'] === 'Rejected'): ?>
+                                <span class="badge" style="background: <?php echo ($step['status'] === 'Rejected') ? 'var(--danger)' : 'var(--success)'; ?>; color: white; padding: 0.5rem 1rem;"><?php echo ($step['status'] === 'Rejected') ? 'Rejected' : 'Approved'; ?></span>
                             <?php else: ?>
                                 <span class="badge" style="background: var(--text-muted); color: white; padding: 0.5rem 1rem;">Waiting</span>
                             <?php endif; ?>
@@ -396,6 +436,54 @@ if ($request) {
 
         <?php endif; ?>
     </div>
+
+    <script>
+        function rejectRequest() {
+            Swal.fire({
+                title: 'Reject Request',
+                text: 'Please enter a remark or reason for rejecting this request:',
+                input: 'textarea',
+                inputPlaceholder: 'Enter reason here...',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Reject',
+                cancelButtonText: 'Cancel',
+                inputValidator: (value) => {
+                    if (!value || value.trim() === '') {
+                        return 'Remarks are required to reject a request!';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('actionInput').value = "reject";
+                    document.getElementById('remarksInput').value = result.value;
+                    document.getElementById('actionForm').submit();
+                }
+            });
+        }
+        
+        function adminSkip() {
+            Swal.fire({
+                title: 'Admin Skip',
+                text: 'Enter Admin Password to Skip this step:',
+                input: 'password',
+                inputPlaceholder: 'Password',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Skip',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (result.value === 'adminpass') {
+                        document.getElementById('actionInput').value = "admin_skip";
+                        document.getElementById('actionForm').submit();
+                    } else {
+                        Swal.fire('Error', 'Incorrect Password.', 'error');
+                    }
+                }
+            });
+        }
+    </script>
 
     <?php if (($approver || (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin')) && !$success): ?>
     <script>
@@ -432,20 +520,6 @@ if ($request) {
             document.getElementById('signature-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         
-        function unlockAdminSignature() {
-            const pwd = prompt("Enter Admin Password to Counter Sign:");
-            if (pwd === "adminpass") {
-                document.getElementById('admin-override-block').style.display = 'none';
-                document.getElementById('signature-role-text').innerHTML = "Role: <strong>Admin Override</strong>";
-                document.getElementById('isAdminBypass').value = "1";
-                document.getElementById('signature-container').style.display = 'block';
-                initSignaturePad();
-                document.getElementById('signature-container').scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } else if (pwd !== null) {
-                alert("Incorrect Password.");
-            }
-        }
-
         function submitSignature() {
             if (!signaturePad || signaturePad.isEmpty()) {
                 alert("Please provide a signature first.");
@@ -458,8 +532,5 @@ if ($request) {
         }
     </script>
     <?php endif; ?>
-
-
-
 </body>
 </html>

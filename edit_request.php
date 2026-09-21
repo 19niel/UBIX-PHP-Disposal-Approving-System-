@@ -2,7 +2,36 @@
 require 'auth.php';
 require 'db.php';
 
-$message = '';
+if (!isset($_GET['id'])) {
+    die("Request ID not provided");
+}
+
+$request_id = $_GET['id'];
+$stmt = $pdo->prepare("SELECT * FROM requests WHERE id = ?");
+$stmt->execute([$request_id]);
+$request = $stmt->fetch();
+
+if (!$request || $request['status'] !== 'Rejected') {
+    die("Only rejected requests can be edited");
+}
+
+$authorized = $is_admin;
+if (!$authorized && isset($_SESSION['user_id'])) {
+    if ($_SESSION['user_id'] == $request['creator_user_id']) {
+        $authorized = true;
+    } else {
+        $stmt_auth = $pdo->prepare("SELECT 1 FROM workflow_final_emails WHERE user_id = ?");
+        $stmt_auth->execute([$_SESSION['user_id']]);
+        if ($stmt_auth->fetchColumn()) $authorized = true;
+    }
+}
+
+if (!$authorized) {
+    die("Access Denied. You must be an admin, the creator, or a final email recipient to edit this request.");
+}
+
+
+
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -12,9 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $request_message = $_POST['message'];
     
     // File upload
-    $attachment_paths = [];
+    $attachment_path = $request['attachment_path'];
     if (isset($_FILES['attachments']) && !empty($_FILES['attachments']['name'][0])) {
-        // Sanitize memo number to be safe for directory names
+        $attachment_paths = [];
         $safe_memo = preg_replace('/[^A-Za-z0-9_\-]/', '_', trim($memo));
         $uploadDir = 'uploads/' . $safe_memo . '/';
         
@@ -29,45 +58,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             }
         }
+        if (!empty($attachment_paths)) {
+            $attachment_path = json_encode($attachment_paths);
+        }
     }
-    $attachment_path = !empty($attachment_paths) ? json_encode($attachment_paths) : '';
 
     try {
-        // Insert request
-        $stmt = $pdo->prepare("INSERT INTO requests (creator_user_id, title, department, memo_number, message, attachment_path, current_sort_number) VALUES (?, ?, ?, ?, ?, ?, 1)");
-        $stmt->execute([$_SESSION['user_id'], $title, $department, $memo, $request_message, $attachment_path]);
-        $request_id = $pdo->lastInsertId();
+        $pdo->beginTransaction();
 
-        // Generate magic link for the first approver (sort_number = 1)
-        $stmt = $pdo->prepare("SELECT user_id, tier_label FROM workflow_routing WHERE sort_number = 1");
-        $stmt->execute();
-        $first_approver = $stmt->fetch();
+        // 1. Update the request
+        $stmt = $pdo->prepare("UPDATE requests SET title = ?, department = ?, memo_number = ?, message = ?, attachment_path = ?, status = 'Pending' WHERE id = ?");
+        $stmt->execute([$title, $department, $memo, $request_message, $attachment_path, $request_id]);
 
-        if ($first_approver) {
+        // 2. Delete the Rejected row in request_approvals for the current step
+        $stmt = $pdo->prepare("DELETE FROM request_approvals WHERE request_id = ? AND sort_number = ? AND status = 'Rejected'");
+        $stmt->execute([$request_id, $request['current_sort_number']]);
+
+        // 3. Generate magic link for the current approver
+        $stmt = $pdo->prepare("SELECT w.user_id, w.tier_label, u.email, u.name FROM workflow_routing w JOIN users u ON w.user_id = u.id WHERE w.sort_number = ?");
+        $stmt->execute([$request['current_sort_number']]);
+        $current_approver = $stmt->fetch();
+
+        if ($current_approver) {
             $token = bin2hex(random_bytes(32));
             $stmt = $pdo->prepare("INSERT INTO magic_links (token, request_id, user_id) VALUES (?, ?, ?)");
-            $stmt->execute([$token, $request_id, $first_approver['user_id']]);
-            
-            // Get user info for email
-            $stmt = $pdo->prepare("SELECT email, name FROM users WHERE id = ?");
-            $stmt->execute([$first_approver['user_id']]);
-            $approver_user = $stmt->fetch();
+            $stmt->execute([$token, $request_id, $current_approver['user_id']]);
             
             require_once 'emailer.php';
-            $sent = sendMagicLinkEmail($approver_user['email'], $approver_user['name'], $token, $title, $first_approver['tier_label']);
+            $sent = sendMagicLinkEmail($current_approver['email'], $current_approver['name'], $token, $title, $current_approver['tier_label']);
             
             if($sent) {
-                echo "<script>alert('Request created successfully! The first approver has been notified.'); window.location.href='dashboard.php';</script>";
+                $pdo->commit();
+                echo "<script>alert('Request updated successfully! The approver has been notified.'); window.location.href='dashboard.php';</script>";
                 exit;
             } else {
-                echo "<script>alert('Request created, but the email failed to send to the first approver.'); window.location.href='dashboard.php';</script>";
+                $pdo->commit();
+                echo "<script>alert('Request updated, but the email failed to send to the approver.'); window.location.href='dashboard.php';</script>";
                 exit;
             }
         } else {
-            $error = "Request created, but no workflow is defined! Please contact admin.";
+            $pdo->commit();
+            $error = "Request updated, but could not find the current approver to notify.";
         }
     } catch(PDOException $e) {
-        $error = "Error creating request: " . $e->getMessage();
+        $pdo->rollBack();
+        $error = "Error updating request: " . $e->getMessage();
     }
 }
 ?>
@@ -76,21 +111,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <link rel="icon" type="image/png" href="Images/favicon.png">
     <meta charset="UTF-8">
-    <title>Create Request - Disposal App</title>
+    <title>Edit Request - Disposal App</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h2>Create New Disposal Request</h2>
+            <h2>Edit Rejected Request #<?php echo $request['id']; ?></h2>
             <a href="dashboard.php" class="btn" style="background: var(--text-muted);">Back to Dashboard</a>
         </div>
         
-        <?php if ($message): ?>
-            <div class="card" style="margin-bottom: 2rem; background: #D1FAE5; color: #065F46; padding: 1rem;">
-                <?php echo htmlspecialchars($message); ?>
-            </div>
-        <?php endif; ?>
         <?php if ($error): ?>
             <div class="card" style="margin-bottom: 2rem; background: #FEE2E2; color: #DC2626; padding: 1rem;">
                 <?php echo htmlspecialchars($error); ?>
@@ -101,17 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <form method="POST" enctype="multipart/form-data">
                 <div class="form-group">
                     <label class="form-label">Request Title</label>
-                    <input type="text" name="title" class="form-control" required placeholder="e.g. Disposal of 5 Old Hard Drives">
-                </div>
-
-                <div class="form-group" style="background: #F8FAFC; padding: 1rem; border-radius: 6px; border-left: 4px solid var(--primary); display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <label class="form-label" style="margin-bottom: 0; color: var(--text-muted); font-size: 0.875rem;">Request Date & Time</label>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--text); margin-top: 0.25rem;">
-                            <?php echo date('F d, Y - h:i A'); ?>
-                        </div>
-                    </div>
-            
+                    <input type="text" name="title" class="form-control" required value="<?php echo htmlspecialchars($request['title']); ?>">
                 </div>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -119,31 +139,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <label class="form-label">Department Name</label>
                         <select name="department" class="form-control" required>
                             <option value="">Select Department...</option>
-                            <option value="Transport & Warehouse">Transport & Warehouse</option>
-                            <option value="MIS DEPARTMENT">MIS DEPARTMENT</option>
-                            <option value="HR">HR</option>
-                            <option value="Finance">Finance</option>
-                            <option value="Operations">Operations</option>
+                            <option value="Transport & Warehouse" <?php echo ($request['department'] == 'Transport & Warehouse') ? 'selected' : ''; ?>>Transport & Warehouse</option>
+                            <option value="MIS DEPARTMENT" <?php echo ($request['department'] == 'MIS DEPARTMENT') ? 'selected' : ''; ?>>MIS DEPARTMENT</option>
+                            <option value="HR" <?php echo ($request['department'] == 'HR') ? 'selected' : ''; ?>>HR</option>
+                            <option value="Finance" <?php echo ($request['department'] == 'Finance') ? 'selected' : ''; ?>>Finance</option>
+                            <option value="Operations" <?php echo ($request['department'] == 'Operations') ? 'selected' : ''; ?>>Operations</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Memo Number</label>
-                        <input type="text" name="memo_number" class="form-control" required placeholder="e.g. MEMO-2026-001">
+                        <input type="text" name="memo_number" class="form-control" required value="<?php echo htmlspecialchars($request['memo_number']); ?>">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Message / Justification</label>
-                    <textarea name="message" class="form-control" rows="5" required placeholder="Describe why these items need to be disposed..."></textarea>
+                    <textarea name="message" class="form-control" rows="5" required><?php echo htmlspecialchars($request['message']); ?></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Attachments (PDF, Word, Excel, Images) - You can select multiple</label>
+                    <label class="form-label">Attachments (Upload new files to overwrite existing) - Optional</label>
                     <input type="file" name="attachments[]" id="attachmentInput" class="form-control" accept=".pdf,.doc,.docx,.jpg,.png,.xls,.xlsx" multiple>
                     <div id="filePreviewArea" style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem;"></div>
+                    
+                    <?php if ($request['attachment_path']): ?>
+                        <div style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);">
+                            <strong>Current Attachments:</strong><br>
+                            <?php 
+                            $attachments = json_decode($request['attachment_path'], true);
+                            if (!is_array($attachments)) {
+                                $attachments = [$request['attachment_path']];
+                            }
+                            foreach ($attachments as $att) {
+                                echo htmlspecialchars(basename($att)) . "<br>";
+                            }
+                            ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
-                <button type="submit" class="btn" style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;">Submit Request</button>
+                <button type="submit" class="btn" style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;">Resubmit Request</button>
             </form>
         </div>
     </div>

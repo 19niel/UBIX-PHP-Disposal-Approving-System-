@@ -118,6 +118,9 @@ $all_requests = $pdo->query("SELECT r.*, u.name as creator_name FROM requests r 
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
                                 <a href="approve.php?id=<?php echo $req['id']; ?>" class="btn" style="background: var(--text-muted); padding: 0.25rem 0.5rem; font-size: 0.875rem;">View</a>
+                                <?php if ($req['status'] === 'Rejected'): ?>
+                                    <a href="edit_request.php?id=<?php echo $req['id']; ?>" class="btn" style="background: var(--primary); padding: 0.25rem 0.5rem; font-size: 0.875rem;">Edit</a>
+                                <?php endif; ?>
                                 <form method="POST" style="margin: 0;" onsubmit="return confirm('Are you sure you want to delete this request? This action cannot be undone.');">
                                     <input type="hidden" name="delete_request_id" value="<?php echo $req['id']; ?>">
                                     <button type="submit" class="btn" style="background: var(--danger); padding: 0.25rem 0.5rem; font-size: 0.875rem;">Delete</button>
