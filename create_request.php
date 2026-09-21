@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
 
         <div class="card" style="max-width: 800px; margin: 0 auto;">
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" id="requestForm">
                 <div class="form-group">
                     <label class="form-label">Request Title</label>
                     <input type="text" name="title" class="form-control" required placeholder="e.g. Disposal of 5 Old Hard Drives">
@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div id="filePreviewArea" style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem;"></div>
                 </div>
 
-                <button type="submit" class="btn" style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;">Submit Request</button>
+                <button type="submit" id="submitBtn" class="btn" style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;">Submit Request</button>
             </form>
         </div>
     </div>
@@ -175,6 +175,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 previewArea.appendChild(fileBox);
             });
+        });
+
+        // Prevent duplicate submissions
+        document.getElementById('requestForm').addEventListener('submit', function() {
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Submitting, please wait...';
+            submitBtn.style.backgroundColor = '#6b7280'; // gray out the button
+            submitBtn.style.cursor = 'not-allowed';
         });
     </script>
 </body>
