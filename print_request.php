@@ -230,9 +230,7 @@ foreach ($approvals as $approval) {
                 <?php foreach ($people as $person): ?>
                 <div class="signature-person">
                     <div class="signature-img-container">
-                        <?php if ($person['admin_bypass_id']): ?>
-                            <img src="<?php echo $person['signature_base64']; ?>" alt="Signature">
-                        <?php elseif ($person['signature_base64'] && $person['signature_base64'] !== 'BYPASSED'): ?>
+                        <?php if (!empty($person['signature_base64']) && $person['signature_base64'] !== 'BYPASSED'): ?>
                             <img src="<?php echo $person['signature_base64']; ?>" alt="Signature">
                         <?php endif; ?>
                     </div>
