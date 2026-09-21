@@ -106,7 +106,8 @@ CREATE TABLE `request_approvals` (
   `tier_label` varchar(100) NOT NULL,
   `signature_base64` longtext DEFAULT NULL,
   `action_date` timestamp NOT NULL DEFAULT current_timestamp(),
-  `status` enum('Approved','Rejected') DEFAULT 'Approved'
+  `status` enum('Approved','Rejected') DEFAULT 'Approved',
+  `remarks` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --

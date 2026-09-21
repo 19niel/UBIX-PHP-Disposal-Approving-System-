@@ -60,6 +60,7 @@ try {
         signature_base64 LONGTEXT,
         action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status ENUM('Approved', 'Rejected') DEFAULT 'Approved',
+        remarks TEXT NULL,
         FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id),
         FOREIGN KEY (admin_bypass_id) REFERENCES users(id) ON DELETE SET NULL
