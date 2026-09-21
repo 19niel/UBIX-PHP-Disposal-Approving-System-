@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
 
         <div class="card" style="max-width: 800px; margin: 0 auto;">
-            <form method="POST" enctype="multipart/form-data" id="requestForm">
+            <form method="POST" enctype="multipart/form-data" onsubmit="document.getElementById('submitBtn').disabled = true; document.getElementById('submitBtn').innerText = 'Submitting, please wait...'; document.getElementById('submitBtn').style.backgroundColor = '#6b7280';">
                 <div class="form-group">
                     <label class="form-label">Request Title</label>
                     <input type="text" name="title" class="form-control" required placeholder="e.g. Disposal of 5 Old Hard Drives">
@@ -175,15 +175,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 previewArea.appendChild(fileBox);
             });
-        });
-
-        // Prevent duplicate submissions
-        document.getElementById('requestForm').addEventListener('submit', function() {
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.disabled = true;
-            submitBtn.innerText = 'Submitting, please wait...';
-            submitBtn.style.backgroundColor = '#6b7280'; // gray out the button
-            submitBtn.style.cursor = 'not-allowed';
         });
     </script>
 </body>

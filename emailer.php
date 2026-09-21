@@ -53,6 +53,7 @@ function sendMagicLinkEmail($toEmail, $toName, $token, $requestTitle, $tierLabel
                 <p style='text-align: center; margin: 30px 0;'>
                     <a href='$link' style='padding: 12px 24px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;'>Review & Sign Request</a>
                 </p>
+                <p style='color: #DC2626; font-size: 13px; text-align: center; font-weight: bold;'>Note: Please make sure you are connected to the UBIXAP@HO WiFi to access this request.</p>
                 <p style='color: #6b7280; font-size: 12px;'>Or copy and paste this link: <br>$link</p>
                 <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;'>
                 <p style='color: #6b7280; font-size: 12px; margin: 0;'>Thank you,<br>Disposal App System</p>
@@ -126,6 +127,7 @@ function sendFinalApprovalEmail($pdo, $request_id) {
                 <p style='text-align: center; margin: 30px 0;'>
                     <a href='{$appUrl}/approve.php?id={$request_id}' style='padding: 12px 24px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;'>View Approved Request</a>
                 </p>
+                <p style='color: #DC2626; font-size: 13px; text-align: center; font-weight: bold;'>Note: Please make sure you are connected to the UBIXAP@HO WiFi to access this request.</p>
                 <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;'>
                 <p style='color: #6b7280; font-size: 12px; margin: 0;'>Thank you,<br>Disposal App System</p>
             </div>
@@ -203,6 +205,7 @@ function sendRejectionEmail($pdo, $request_id, $rejecterName, $remarks) {
                 <p style='text-align: center; margin: 30px 0;'>
                     <a href='{$appUrl}/approve.php?id={$request_id}' style='padding: 12px 24px; background-color: #DC2626; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;'>View Request</a>
                 </p>
+                <p style='color: #DC2626; font-size: 13px; text-align: center; font-weight: bold;'>Note: Please make sure you are connected to the UBIXAP@HO WiFi to access this request.</p>
                 <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;'>
                 <p style='color: #6b7280; font-size: 12px; margin: 0;'>Thank you,<br>Disposal App System</p>
             </div>
